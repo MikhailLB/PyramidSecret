@@ -1,0 +1,38 @@
+name: pyramid_secret
+description: "Pyramid Secret — Egyptian themed minesweeper game."
+publish_to: 'none'
+
+version: 1.0.1+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  webview_flutter: ^4.10.0
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/icons.jpg"
+  min_sdk_android: 21
+  remove_alpha_ios: false
+  adaptive_icon_background: "#0A1128"
+  adaptive_icon_foreground: "assets/icons.jpg"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/Notifications/
+    - assets/Nowifi/
