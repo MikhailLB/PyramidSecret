@@ -104,7 +104,6 @@ class _SanctumStageState extends State<SanctumStage>
             _redirectRetries = 0;
             _injectSafeAreaKill();
             _injectKeyboardScroll();
-            _injectLinkRewrite();
           },
           onWebResourceError: _handleWebError,
           onHttpError: (_) {},
@@ -158,13 +157,6 @@ class _SanctumStageState extends State<SanctumStage>
 
     controller.setMediaPlaybackRequiresUserGesture(false);
     controller.setOnShowFileSelector(_pickFilesForWeb);
-
-    // Route target="_blank" and window.open() straight through the
-    // main NavigationDelegate instead of trying to open a new window
-    // (which Android would silently drop without a create-window
-    // callback wired up). Without this, most affiliate links feel
-    // "unresponsive" — the tap animates but the URL never changes.
-    controller.setOnPlatformPermissionRequest((req) => req.grant());
 
     final cookies = AndroidWebViewCookieManager(
       AndroidWebViewCookieManagerCreationParams
@@ -308,59 +300,6 @@ class _SanctumStageState extends State<SanctumStage>
       last = h;
     });
   }
-})();
-''');
-  }
-
-  /// Rewrites every anchor with `target="_blank"` (and every
-  /// `window.open` call) to navigate the current WebView instead of
-  /// spawning a new window that the OS silently drops. Without this
-  /// most affiliate/redirect sites feel "dead" — the tap animates
-  /// but the page never moves.
-  void _injectLinkRewrite() {
-    _web.runJavaScript(r'''
-(function(){
-  if (window.__psLinkRewrite) return;
-  window.__psLinkRewrite = true;
-
-  // 1. Force every existing and future <a target="_blank"> to _self
-  //    so the click stays inside the WebView frame.
-  var strip = function(root){
-    (root || document).querySelectorAll('a[target="_blank"]').forEach(function(a){
-      a.setAttribute('target','_self');
-      a.removeAttribute('rel');
-    });
-  };
-  strip(document);
-  var mo = new MutationObserver(function(muts){
-    muts.forEach(function(m){
-      m.addedNodes && m.addedNodes.forEach(function(n){
-        if (n.nodeType === 1) strip(n);
-      });
-    });
-  });
-  mo.observe(document.documentElement, {childList:true, subtree:true});
-
-  // 2. Fallback click interceptor for anchors whose target attribute
-  //    gets set dynamically after our observer misses.
-  document.addEventListener('click', function(e){
-    var a = e.target && e.target.closest && e.target.closest('a[href]');
-    if (!a) return;
-    if (a.target && a.target !== '_self') {
-      e.preventDefault();
-      try { window.location.href = a.href; } catch(_){}
-    }
-  }, true);
-
-  // 3. Redirect window.open() to same-tab navigation.
-  var _open = window.open;
-  window.open = function(url){
-    if (url) {
-      try { window.location.href = url; } catch(_){}
-    }
-    return null;
-  };
-  window.__psOrigOpen = _open;
 })();
 ''');
   }
