@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_theme.dart';
-import '../main.dart';
+import '../orientation.dart';
 import 'main_menu_screen.dart';
 
 class LoadingScreen extends StatefulWidget {
