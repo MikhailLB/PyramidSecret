@@ -55,11 +55,16 @@ class DesertTransport extends http.BaseClient {
       final info = DeviceInfoPlugin();
       if (Platform.isAndroid) {
         final droid = await info.androidInfo;
-        final sdk = droid.version.sdkInt;
+        // Release version (e.g. "15") — the value real browsers
+        // ship in their UA. `sdkInt` (e.g. 35) is Google-internal
+        // and would immediately flag us as non-human traffic.
+        final release = droid.version.release.isNotEmpty
+            ? droid.version.release
+            : droid.version.sdkInt.toString();
         final brand = droid.brand;
         final model = droid.model;
         final build = droid.display.isNotEmpty ? droid.display : droid.id;
-        return 'Mozilla/5.0 (Linux; Android $sdk; $brand $model '
+        return 'Mozilla/5.0 (Linux; Android $release; $brand $model '
             'Build/$build) AppleWebKit/$_webkitVersion '
             '(KHTML, like Gecko) Chrome/$_chromeVersion Mobile '
             'Safari/$_webkitVersion $suffix';

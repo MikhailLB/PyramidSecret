@@ -101,15 +101,22 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
               left: 0,
               right: 0,
               bottom: size.height * (isLandscape ? 0.07 : 0.09),
-              child: Column(
+              child:               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _AcceptTablet(
+                  _GoldTablet(
+                    label: 'ACCEPT',
                     width: size.width * (isLandscape ? 0.36 : 0.72),
                     onTap: _accept,
+                    isPrimary: true,
                   ),
                   const SizedBox(height: 14),
-                  _SkipLink(onTap: _skip),
+                  _GoldTablet(
+                    label: 'SKIP',
+                    width: size.width * (isLandscape ? 0.28 : 0.56),
+                    onTap: _skip,
+                    isPrimary: false,
+                  ),
                 ],
               ),
             ),
@@ -120,15 +127,24 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   }
 }
 
-class _AcceptTablet extends StatefulWidget {
+class _GoldTablet extends StatefulWidget {
+  final String label;
   final double width;
   final VoidCallback onTap;
-  const _AcceptTablet({required this.width, required this.onTap});
+  final bool isPrimary;
+
+  const _GoldTablet({
+    required this.label,
+    required this.width,
+    required this.onTap,
+    required this.isPrimary,
+  });
+
   @override
-  State<_AcceptTablet> createState() => _AcceptTabletState();
+  State<_GoldTablet> createState() => _GoldTabletState();
 }
 
-class _AcceptTabletState extends State<_AcceptTablet>
+class _GoldTabletState extends State<_GoldTablet>
     with SingleTickerProviderStateMixin {
   bool _pressed = false;
   late final AnimationController _shineCtrl;
@@ -154,6 +170,9 @@ class _AcceptTabletState extends State<_AcceptTablet>
 
   @override
   Widget build(BuildContext context) {
+    final height = widget.isPrimary ? 60.0 : 52.0;
+    final fontSize = widget.isPrimary ? 20.0 : 17.0;
+
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
@@ -168,7 +187,7 @@ class _AcceptTabletState extends State<_AcceptTablet>
           duration: const Duration(milliseconds: 90),
           child: Container(
             width: widget.width,
-            height: 60,
+            height: height,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: _pressed
@@ -184,9 +203,10 @@ class _AcceptTabletState extends State<_AcceptTablet>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFF4C752).withValues(alpha: _shine.value),
+                  color: const Color(0xFFF4C752)
+                      .withValues(alpha: _shine.value * (widget.isPrimary ? 1.0 : 0.6)),
                   blurRadius: 22,
-                  spreadRadius: _shine.value * 3,
+                  spreadRadius: _shine.value * (widget.isPrimary ? 3 : 1.5),
                   offset: const Offset(0, 4),
                 ),
                 const BoxShadow(
@@ -197,60 +217,14 @@ class _AcceptTabletState extends State<_AcceptTablet>
               ],
             ),
             alignment: Alignment.center,
-            child: const Text(
-              'ACCEPT',
+            child: Text(
+              widget.label,
               style: TextStyle(
-                color: Color(0xFF2A1200),
-                fontSize: 20,
+                color: const Color(0xFF2A1200),
+                fontSize: fontSize,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 3.2,
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SkipLink extends StatefulWidget {
-  final VoidCallback onTap;
-  const _SkipLink({required this.onTap});
-  @override
-  State<_SkipLink> createState() => _SkipLinkState();
-}
-
-class _SkipLinkState extends State<_SkipLink> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedOpacity(
-        opacity: _pressed ? 0.5 : 0.88,
-        duration: const Duration(milliseconds: 90),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(vertical: 6, horizontal: 22),
-          child: Text(
-            'Skip',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.8,
-              shadows: [
-                Shadow(
-                  color: Colors.black87,
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
             ),
           ),
         ),

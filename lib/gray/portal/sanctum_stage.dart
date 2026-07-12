@@ -54,6 +54,12 @@ class _SanctumStageState extends State<SanctumStage>
     with WidgetsBindingObserver {
   late final WebViewController _web;
   bool _loading = true;
+  // True until the first onProgress >= 60 % OR onPageFinished. Once
+  // flipped, the WebView is revealed and the black cover fades out
+  // so the user starts seeing content long before the last request
+  // finishes.
+  bool _contentReady = false;
+  int _progress = 0;
   bool _errored = false;
   bool _routedAway = false;
 
@@ -89,12 +95,27 @@ class _SanctumStageState extends State<SanctumStage>
             setState(() {
               _errored = false;
               _loading = true;
+              _progress = 0;
+              _contentReady = false;
+            });
+          },
+          onProgress: (p) {
+            if (!mounted) return;
+            setState(() {
+              _progress = p;
+              // Reveal the WebView as soon as the DOM is populated
+              // (~55–65 %) so the perceived load time drops dramatically.
+              if (!_contentReady && p >= 55) _contentReady = true;
             });
           },
           onPageFinished: (_) {
             if (!mounted) return;
             if (_errored) return;
-            setState(() => _loading = false);
+            setState(() {
+              _loading = false;
+              _contentReady = true;
+              _progress = 100;
+            });
             _redirectRetries = 0;
             _injectSafeAreaKill();
             _injectKeyboardScroll();
@@ -184,6 +205,7 @@ class _SanctumStageState extends State<SanctumStage>
       setState(() {
         _errored = true;
         _loading = true;
+        _contentReady = false;
       });
     }
     if (error.isForMainFrame == false) return;
@@ -398,6 +420,10 @@ class _SanctumStageState extends State<SanctumStage>
         body: Stack(
           fit: StackFit.expand,
           children: [
+            // WebView is always mounted; we only fade the cover on top
+            // so the first paint arrives without waiting for
+            // onPageFinished (which many affiliate stacks fire late
+            // due to lingering tracking pixels).
             Padding(
               padding: isLandscape
                   ? EdgeInsets.only(
@@ -407,12 +433,22 @@ class _SanctumStageState extends State<SanctumStage>
                   : EdgeInsets.only(top: padding.top),
               child: WebViewWidget(controller: _web),
             ),
-            if (_loading)
-              const Positioned.fill(
-                child: ColoredBox(
+
+            // Black cover — visible only until _contentReady flips
+            // (progress ≥ 55 %) OR while _errored is latched.
+            IgnorePointer(
+              ignoring: _contentReady && !_errored,
+              child: AnimatedOpacity(
+                opacity: (_contentReady && !_errored) ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 220),
+                child: Container(
                   color: Colors.black,
-                  child: Center(
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 44,
+                    height: 44,
                     child: CircularProgressIndicator(
+                      strokeWidth: 3,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Color(0xFFF4C752),
                       ),
@@ -420,6 +456,31 @@ class _SanctumStageState extends State<SanctumStage>
                   ),
                 ),
               ),
+            ),
+
+            // Thin gold progress bar pinned to the top of the WebView
+            // (below status-bar padding). Fades out once loading is
+            // fully done.
+            Positioned(
+              top: isLandscape ? 0 : padding.top,
+              left: 0,
+              right: 0,
+              child: AnimatedOpacity(
+                opacity: _loading ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 260),
+                child: SizedBox(
+                  height: 2.5,
+                  child: LinearProgressIndicator(
+                    value: _progress > 0 ? _progress / 100 : null,
+                    minHeight: 2.5,
+                    backgroundColor: Colors.black.withValues(alpha: 0.15),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFFF4C752),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

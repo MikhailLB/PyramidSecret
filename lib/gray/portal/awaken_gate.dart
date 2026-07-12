@@ -45,9 +45,20 @@ class AwakenGate extends StatefulWidget {
 }
 
 class _AwakenGateState extends State<AwakenGate> {
+  // The bar animates continuously toward 0.92 over ~9 s so the user
+  // always sees motion no matter which branch of the state machine
+  // is currently in flight. The remaining 8 % are filled instantly
+  // right before we push the next screen — that's the "loaded"
+  // signal the user asked for.
+  static const Duration _ceilingApproach = Duration(milliseconds: 9000);
+  static const double _naturalCeiling = 0.92;
+  static const Duration _tick = Duration(milliseconds: 60);
+
   double _fill = 0.0;
   int _dots = 0;
   Timer? _dotTimer;
+  Timer? _fillTimer;
+  DateTime? _fillStart;
   bool _routed = false;
 
   @override
@@ -57,24 +68,55 @@ class _AwakenGateState extends State<AwakenGate> {
       if (!mounted) return;
       setState(() => _dots = (_dots + 1) % 4);
     });
+    _startFillTimer();
     _driveGrayFlow();
   }
 
   @override
   void dispose() {
     _dotTimer?.cancel();
+    _fillTimer?.cancel();
     super.dispose();
   }
 
-  void _setFill(double next) {
-    if (!mounted) return;
-    setState(() => _fill = next.clamp(0.0, 1.0));
+  void _startFillTimer() {
+    _fillStart = DateTime.now();
+    _fillTimer = Timer.periodic(_tick, (_) {
+      if (!mounted) {
+        _fillTimer?.cancel();
+        return;
+      }
+      final elapsed = DateTime.now()
+          .difference(_fillStart!)
+          .inMilliseconds
+          .toDouble();
+      // Slight ease-out so the last 20 % crawl instead of leaping.
+      final ratio =
+          (elapsed / _ceilingApproach.inMilliseconds).clamp(0.0, 1.0);
+      final eased = 1.0 - (1.0 - ratio) * (1.0 - ratio);
+      final target = eased * _naturalCeiling;
+      if (target > _fill) setState(() => _fill = target);
+      if (ratio >= 1.0) _fillTimer?.cancel();
+    });
   }
+
+  /// Called just before pushReplacement — rushes the bar to 100 %
+  /// and waits one frame so the user actually sees it snap full.
+  Future<void> _finalizeFill() async {
+    _fillTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _fill = 1.0);
+    await Future<void>.delayed(const Duration(milliseconds: 260));
+  }
+
+  // Silences the analyzer for now-unused stub while keeping call
+  // sites readable if we ever need to nudge the bar mid-flow again.
+  // ignore: unused_element
+  void _setFill(double v) => setState(() => _fill = v.clamp(0.0, 1.0));
 
   Future<void> _driveGrayFlow() async {
     widget.courier.onTokenRotated = _rotateToken;
     unawaited(widget.courier.awaken());
-    _setFill(0.15);
 
     final mode = widget.vault.readPortalMode();
     switch (mode) {
@@ -101,15 +143,12 @@ class _AwakenGateState extends State<AwakenGate> {
   String _resolveLocale() => Platform.localeName.replaceAll('-', '_');
 
   Future<void> _firstContact() async {
-    _setFill(0.28);
-
     final online = await widget.scanner.hasReachableNet();
     if (!online) {
       _sendToTempest();
       return;
     }
 
-    _setFill(0.45);
     await widget.relay.awaken();
 
     // Phase 1 — SDK race with a hard cap.
@@ -126,8 +165,6 @@ class _AwakenGateState extends State<AwakenGate> {
       ),
     ]);
 
-    _setFill(0.7);
-
     // Phase 2 — deep link says non-organic, but SDK is still silent.
     if (!widget.relay.hasInstallPayload &&
         widget.relay.deepLinkSuggestsNonOrganic) {
@@ -141,8 +178,6 @@ class _AwakenGateState extends State<AwakenGate> {
       ]);
     }
 
-    _setFill(0.85);
-
     final body = await widget.relay.composeBody(
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
@@ -151,21 +186,18 @@ class _AwakenGateState extends State<AwakenGate> {
 
     if (reply.hasShrine) {
       await widget.vault.writePortalMode(PortalMode.unlocked);
-      _setFill(1.0);
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await _finalizeFill();
       _sendToShrine(reply.shrineUrl!);
       return;
     }
 
     // "sealed" is a permanent verdict per TZ §9 — never re-ask.
     await widget.vault.writePortalMode(PortalMode.sealed);
-    _setFill(1.0);
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    await _finalizeFill();
     _rollIntoWhite();
   }
 
   Future<void> _resumeUnlocked() async {
-    _setFill(0.3);
     final live = await widget.scanner.hasReachableNet();
     if (!live) {
       _sendToTempest();
@@ -175,14 +207,13 @@ class _AwakenGateState extends State<AwakenGate> {
     // Cold-tap URL wins over every other candidate.
     final cold = await widget.vault.pluckColdPushUrl();
     if (cold != null && cold.isNotEmpty) {
-      _setFill(1.0);
+      await _finalizeFill();
       _sendToShrine(cold);
       return;
     }
 
     final cached = await widget.dispatcher.lastKnownShrine();
 
-    _setFill(0.55);
     await widget.relay.awaken();
     await Future.wait<void>([
       widget.relay
@@ -196,15 +227,13 @@ class _AwakenGateState extends State<AwakenGate> {
         cap: Duration(seconds: SanctumConfig.firstLaunchDeepLinkCapSeconds),
       ),
     ]);
-    _setFill(0.8);
 
     final body = await widget.relay.composeBody(
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
     );
     final reply = await widget.dispatcher.ask(body);
-    _setFill(1.0);
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+    await _finalizeFill();
 
     if (reply.hasShrine) {
       _sendToShrine(reply.shrineUrl!);
@@ -222,11 +251,7 @@ class _AwakenGateState extends State<AwakenGate> {
   Future<void> _rollIntoWhite() async {
     if (_routed) return;
     _routed = true;
-    // Delay so the progress fills visually before the crossfade.
-    for (var i = 0; i < 6 && mounted; i++) {
-      _setFill(0.5 + i * 0.09);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-    }
+    await _finalizeFill();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
