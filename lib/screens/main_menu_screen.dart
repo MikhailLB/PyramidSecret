@@ -7,8 +7,8 @@ import 'webview_screen.dart';
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
-  static const _privacyUrl = 'https://www.youtube.com/watch?v=j-iheFkstFQ';
-  static const _supportUrl = 'https://www.youtube.com/watch?v=j-iheFkstFQ';
+  static const _privacyUrl = 'https://pyramidseccret.com/privacy-policy.html';
+  static const _supportUrl = 'https://pyramidseccret.com/support.html';
 
   @override
   Widget build(BuildContext context) {

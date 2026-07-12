@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-
-import '../app_theme.dart';
 
 class WebViewScreen extends StatefulWidget {
   final String url;
@@ -22,7 +21,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppColors.darkNavy)
+      ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) => setState(() => _loading = true),
@@ -35,29 +34,38 @@ class _WebViewScreenState extends State<WebViewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.darkNavy,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: AppColors.darkNavy,
-        foregroundColor: AppColors.goldBright,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.white,
+          statusBarIconBrightness: Brightness.dark,
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        surfaceTintColor: Colors.white,
+        elevation: 0.5,
         title: Text(
           widget.title,
           style: const TextStyle(
-            color: AppColors.goldBright,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.5,
+            color: Colors.black,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            fontSize: 18,
           ),
         ),
-        iconTheme: const IconThemeData(color: AppColors.goldBright),
-        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_loading)
-            const Center(
-              child: CircularProgressIndicator(color: AppColors.goldBright),
-            ),
-        ],
+      body: Container(
+        color: Colors.white,
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_loading)
+              const Center(
+                child: CircularProgressIndicator(color: Colors.black),
+              ),
+          ],
+        ),
       ),
     );
   }
