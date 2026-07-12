@@ -28,8 +28,9 @@ import 'tempest_screen.dart';
 // warm push URL delivery, cold-tap recovery.
 
 Future<void> primeSanctumEngine({String? warmupHost}) async {
-  // Best-effort DNS warm-up so the first WebView request skips the
-  // 200–800 ms cold-lookup penalty on real cellular networks.
+  // Best-effort DNS lookup so the WebView's first request skips the
+  // cold-lookup penalty on cellular. Non-blocking — 400 ms cap, every
+  // failure is swallowed.
   if (warmupHost == null) return;
   try {
     await InternetAddress.lookup(warmupHost)
@@ -58,8 +59,7 @@ class SanctumStage extends StatefulWidget {
 class _SanctumStageState extends State<SanctumStage>
     with WidgetsBindingObserver {
   late final WebViewController _web;
-  // Only used by the error path — the WebView itself is unconditionally
-  // visible from the first frame so slow sites paint incrementally.
+  bool _loading = true;
   bool _errored = false;
   bool _routedAway = false;
 
@@ -87,19 +87,20 @@ class _SanctumStageState extends State<SanctumStage>
     _web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(desertTransport.userAgent)
-      // White background matches the default site canvas, so slow
-      // sites feel like a browser tab loading rather than a black
-      // hole followed by content.
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
-            if (!mounted || !_errored) return;
-            setState(() => _errored = false);
+            if (!mounted) return;
+            setState(() {
+              _errored = false;
+              _loading = true;
+            });
           },
           onPageFinished: (_) {
             if (!mounted) return;
             if (_errored) return;
+            setState(() => _loading = false);
             _redirectRetries = 0;
             _injectSafeAreaKill();
             _injectKeyboardScroll();
@@ -185,7 +186,12 @@ class _SanctumStageState extends State<SanctumStage>
   void _handleWebError(WebResourceError error) {
     // §4 belt-and-braces: cover the WebView instantly so the native
     // "no internet dinosaur" never shows up while we route away.
-    if (mounted) setState(() => _errored = true);
+    if (mounted) {
+      setState(() {
+        _errored = true;
+        _loading = true;
+      });
+    }
     if (error.isForMainFrame == false) return;
 
     final blurb = error.description.toLowerCase();
@@ -393,15 +399,11 @@ class _SanctumStageState extends State<SanctumStage>
         if (!didPop) await _onBackTap();
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.black,
         resizeToAvoidBottomInset: false,
         body: Stack(
           fit: StackFit.expand,
           children: [
-            // WebView renders on top of a plain black background from
-            // the very first frame — no cover, no spinner. Slow sites
-            // paint incrementally instead of being hidden behind a
-            // loading circle.
             Padding(
               padding: isLandscape
                   ? EdgeInsets.only(
@@ -411,15 +413,17 @@ class _SanctumStageState extends State<SanctumStage>
                   : EdgeInsets.only(top: padding.top),
               child: WebViewWidget(controller: _web),
             ),
-
-            // Full-screen cover is only shown while an actual error is
-            // latched (so the OS "no-internet dinosaur" never leaks
-            // through). No spinner — the black rectangle by itself is
-            // enough during the ~200 ms error-to-route hand-off.
-            if (_errored)
+            if (_loading)
               const Positioned.fill(
-                child: IgnorePointer(
-                  child: ColoredBox(color: Colors.white),
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFFF4C752),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
