@@ -267,7 +267,9 @@ class _AwakenGateState extends State<AwakenGate> {
     if (_routed) return;
     _routed = true;
     await sanctum.loadLibrary();
-    await sanctum.primeSanctumEngine();
+    await sanctum.primeSanctumEngine(
+      warmupHost: Uri.tryParse(url)?.host,
+    );
     if (!mounted) return;
 
     if (widget.vault.shouldSummonFlame()) {

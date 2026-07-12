@@ -106,9 +106,9 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
                 children: [
                   _GoldTablet(
                     label: 'ACCEPT',
-                    width: size.width * (isLandscape ? 0.36 : 0.72),
+                    width: size.width * (isLandscape ? 0.28 : 0.56),
                     onTap: _accept,
-                    isPrimary: true,
+                    isPrimary: false,
                   ),
                   const SizedBox(height: 14),
                   _GoldTablet(
