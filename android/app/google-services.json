@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "project_id": "pyramid-secret-placeholder",
-    "storage_bucket": "pyramid-secret-placeholder.appspot.com"
+    "project_number": "853483459360",
+    "project_id": "pyramidsecret-39c39",
+    "storage_bucket": "pyramidsecret-39c39.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:853483459360:android:b30462f5d294f5cbbb3d45",
         "android_client_info": {
           "package_name": "com.pyramsec.pyramidsecret"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyPlaceholderKey0000000000000000000000"
+          "current_key": "AIzaSyD58IPGGa4xiFDOUd5-IQvbrs5mRslzUyc"
         }
       ],
       "services": {

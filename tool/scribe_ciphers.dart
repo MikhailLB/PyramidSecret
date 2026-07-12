@@ -32,8 +32,8 @@ void main() {
   _dump('chrome.version', '149.0.7827.163');
   _dump('webkit.version', '537.36');
 
-  // Placeholders — the operator will re-run this script once real keys
-  // are handed over, and paste the fresh arrays into env/oracle_creds.dart.
+  // Fill these in locally before running — DO NOT commit real values.
+  // The final encoded arrays live in lib/gray/env/oracle_creds.dart.
   _dump('appsflyer.key', 'REPLACE_WITH_APPSFLYER_DEV_KEY');
   _dump('firebase.project', 'REPLACE_WITH_FIREBASE_PROJECT_NUMBER');
 }
