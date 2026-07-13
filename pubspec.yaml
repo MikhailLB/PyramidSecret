@@ -35,9 +35,16 @@ dependencies:
   appsflyer_sdk: 6.15.2
 
   # ─── Push / Firebase ───
-  firebase_core: 3.15.0
-  firebase_messaging: 15.2.3
-  firebase_app_check: 0.3.2+8
+  # NOTE: firebase_core / firebase_messaging / firebase_app_check MUST be
+  # bumped as a set — mixing (e.g. firebase_core 3.15.0 with the older
+  # firebase_app_check 0.3.2+8) drags in an outdated
+  # firebase_core_platform_interface, and the pigeon method channels
+  # between Dart and Android stop matching (release builds fail with
+  # `channel-error, Unable to establish connection on channel.` on the
+  # first call to Firebase.initializeApp()).
+  firebase_core: 3.15.2
+  firebase_messaging: 15.2.10
+  firebase_app_check: 0.3.2+10
   flutter_local_notifications: 17.2.4
 
   # ─── Runtime permissions (needed for Android 13+ POST_NOTIFICATIONS
