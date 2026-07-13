@@ -40,44 +40,42 @@ class _WebViewScreenState extends State<WebViewScreen> {
       ),
       child: Scaffold(
         backgroundColor: Colors.white,
-        // Full-screen WebView: no AppBar so the page uses the entire
-        // viewport; a floating Back button sits over the top-left inside
-        // the safe area.
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            WebViewWidget(controller: _controller),
-            if (_loading)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.black),
-              ),
-            Positioned(
-              top: 0,
-              left: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Material(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    shape: const CircleBorder(),
-                    elevation: 3,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => Navigator.of(context).maybePop(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(
-                          Icons.arrow_back_rounded,
-                          color: Colors.black,
-                          size: 24,
-                        ),
+        // No AppBar — the page renders full-width and the entire chrome
+        // is the floating Back pill. The WebView itself lives inside a
+        // SafeArea so notches / status bar / gesture insets never eat
+        // into the page content.
+        body: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              WebViewWidget(controller: _controller),
+              if (_loading)
+                const Center(
+                  child: CircularProgressIndicator(color: Colors.black),
+                ),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  shape: const CircleBorder(),
+                  elevation: 3,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.black,
+                        size: 24,
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
