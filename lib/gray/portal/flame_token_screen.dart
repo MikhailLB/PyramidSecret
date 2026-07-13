@@ -121,14 +121,18 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _ShrineTablet(
-                    width: size.width * (isLandscape ? 0.36 : 0.72),
+                    width: size.width * (isLandscape ? 0.26 : 0.72),
+                    height: isLandscape ? 44.0 : 60.0,
+                    fontSize: isLandscape ? 15.0 : 20.0,
                     label: 'ACCEPT',
                     withShine: true,
                     onTap: _accept,
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: isLandscape ? 10 : 14),
                   _ShrineTablet(
-                    width: size.width * (isLandscape ? 0.36 : 0.72),
+                    width: size.width * (isLandscape ? 0.26 : 0.72),
+                    height: isLandscape ? 44.0 : 60.0,
+                    fontSize: isLandscape ? 15.0 : 20.0,
                     label: 'SKIP',
                     withShine: false,
                     onTap: _skip,
@@ -150,6 +154,8 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
 /// "primary / secondary" without changing the button's physique.
 class _ShrineTablet extends StatefulWidget {
   final double width;
+  final double height;
+  final double fontSize;
   final String label;
   final bool withShine;
   final VoidCallback onTap;
@@ -158,6 +164,8 @@ class _ShrineTablet extends StatefulWidget {
     required this.width,
     required this.label,
     required this.onTap,
+    this.height = 60.0,
+    this.fontSize = 20.0,
     this.withShine = false,
   });
 
@@ -228,16 +236,16 @@ class _ShrineTabletState extends State<_ShrineTablet>
       duration: const Duration(milliseconds: 90),
       child: Container(
         width: widget.width,
-        height: 60,
+        height: widget.height,
         decoration: _decoration(shineAlpha),
         alignment: Alignment.center,
         child: Text(
           widget.label,
-          style: const TextStyle(
-            color: Color(0xFF2A1200),
-            fontSize: 20,
+          style: TextStyle(
+            color: const Color(0xFF2A1200),
+            fontSize: widget.fontSize,
             fontWeight: FontWeight.w900,
-            letterSpacing: 3.2,
+            letterSpacing: widget.fontSize > 17 ? 3.2 : 2.4,
           ),
         ),
       ),

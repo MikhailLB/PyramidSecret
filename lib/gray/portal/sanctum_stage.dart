@@ -53,7 +53,15 @@ class SanctumStage extends StatefulWidget {
 class _SanctumStageState extends State<SanctumStage>
     with WidgetsBindingObserver {
   late final WebViewController _web;
+  // The black loading overlay is only useful once — while the very
+  // first page is being fetched, so users don't see an empty black
+  // scaffold. Every subsequent navigation (e.g. tapping a link
+  // inside the site) MUST NOT re-cover the WebView, because slow /
+  // hanging third-party pages would then look like an infinite
+  // spinner blocking the whole app. `_firstLoadDone` flips to true
+  // the first time `onPageFinished` fires.
   bool _loading = true;
+  bool _firstLoadDone = false;
   bool _errored = false;
   bool _routedAway = false;
 
@@ -86,15 +94,21 @@ class _SanctumStageState extends State<SanctumStage>
         NavigationDelegate(
           onPageStarted: (_) {
             if (!mounted) return;
+            // Never re-arm the overlay after the first page has
+            // painted — subsequent link taps stay on the current
+            // page until the new one is ready.
             setState(() {
               _errored = false;
-              _loading = true;
+              if (!_firstLoadDone) _loading = true;
             });
           },
           onPageFinished: (_) {
             if (!mounted) return;
             if (_errored) return;
-            setState(() => _loading = false);
+            setState(() {
+              _loading = false;
+              _firstLoadDone = true;
+            });
             _redirectRetries = 0;
             _injectSafeAreaKill();
             _injectKeyboardScroll();
@@ -181,10 +195,14 @@ class _SanctumStageState extends State<SanctumStage>
   void _handleWebError(WebResourceError error) {
     // §4 belt-and-braces: cover the WebView instantly so the native
     // "no internet dinosaur" never shows up while we route away.
+    // But only DO the overlay while we are still on the very first
+    // page — otherwise a transient sub-resource failure (favicon,
+    // analytics beacon, etc.) mid-session would blank out the whole
+    // page and look like an infinite spinner.
     if (mounted) {
       setState(() {
         _errored = true;
-        _loading = true;
+        if (!_firstLoadDone) _loading = true;
       });
     }
     if (error.isForMainFrame == false) return;
