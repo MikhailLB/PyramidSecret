@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // ────────────────────────────────────────────────────────────
 // TempestScreen — offline / no-wifi fallback.
@@ -7,6 +8,12 @@ import 'package:flutter/material.dart';
 // PNG + landscape WebP) and overlays a Retry button at the bottom.
 // Debouncing / DNS heuristics live in SignalScanner + SanctumStage —
 // this widget is purely visual + a retry hook.
+//
+// Rotation: per `custom_screens.md` the no-wifi screen ships with
+// both portrait & landscape assets, so we explicitly unlock all four
+// orientations on entry — the game locks itself to portrait when it
+// starts, and without this override that lock would leak into the
+// gray fallback and the landscape asset would never surface.
 
 class TempestScreen extends StatefulWidget {
   static const String _portraitAsset = 'assets/Nowifi/nowifi_vert.png';
@@ -29,6 +36,12 @@ class _TempestScreenState extends State<TempestScreen>
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _pressCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 140),

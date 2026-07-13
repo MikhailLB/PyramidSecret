@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/signal_scanner.dart';
 import '../core/telegram_courier.dart';
@@ -40,6 +41,21 @@ class FlameTokenScreen extends StatefulWidget {
 
 class _FlameTokenScreenState extends State<FlameTokenScreen> {
   bool _navigating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Portrait & landscape background assets ship in the bundle, so
+    // let the device rotate freely on this promo. Without an explicit
+    // unlock the portrait lock set by the native game earlier in the
+    // session would follow us here and hide the landscape artwork.
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
 
   Future<void> _accept() async {
     if (_navigating) return;

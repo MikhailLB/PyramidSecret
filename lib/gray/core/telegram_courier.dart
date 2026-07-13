@@ -85,7 +85,17 @@ class TelegramCourier {
 
       await _prepareLocal();
 
-      _token = await _fcm!.getToken();
+      // Cap the initial token fetch so a slow FCM handshake cannot
+      // block splash forever. Any late-arriving token is still picked
+      // up via `onTokenRefresh` (the SDK fires that hook when the
+      // registration finally completes).
+      try {
+        _token = await _fcm!
+            .getToken()
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {
+        _token = null;
+      }
 
       _fcm!.onTokenRefresh.listen((fresh) {
         _token = fresh;

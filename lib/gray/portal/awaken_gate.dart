@@ -126,7 +126,19 @@ class _AwakenGateState extends State<AwakenGate> {
 
   Future<void> _driveGrayFlow() async {
     widget.courier.onTokenRotated = _rotateToken;
-    unawaited(widget.courier.awaken());
+    // Await Firebase warm-up — we NEED the FCM registration token to
+    // land in the very first config.php POST, otherwise the backend
+    // registers an install without a push_token and later token
+    // refreshes fail with "Application install not found" (the update
+    // path is keyed on af_id + push_token). This mirrors the sequence
+    // used by AdventureRoad's splash: `await pushService.init()`
+    // BEFORE any attribution / remote POST.
+    //
+    // Courier has its own bounded timeout around `getToken()`, so this
+    // await is safe — worst case ≈ 10 s even if FCM refuses to
+    // register. If the token still arrives after that, FCM's
+    // `onTokenRefresh` listener will re-POST via `onTokenRotated`.
+    await widget.courier.awaken().catchError((_) {});
 
     final mode = widget.vault.readPortalMode();
     switch (mode) {
