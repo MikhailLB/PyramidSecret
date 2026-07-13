@@ -101,7 +101,11 @@ class _TempestScreenState extends State<TempestScreen>
               onDown: () => _pressCtrl.reverse(),
               onUp: () => _pressCtrl.forward(),
               anchorFromBottom: isLandscape ? 0.09 : 0.11,
-              widthFactor: isLandscape ? 0.34 : 0.72,
+              widthFactor: isLandscape ? 0.24 : 0.72,
+              height: isLandscape ? 42.0 : 58.0,
+              fontSize: isLandscape ? 14.0 : 20.0,
+              busyFontSize: isLandscape ? 12.0 : 17.0,
+              spinnerSize: isLandscape ? 16.0 : 22.0,
             ),
           ],
         ),
@@ -118,6 +122,10 @@ class _RetryTablet extends StatelessWidget {
   final VoidCallback onUp;
   final double anchorFromBottom;
   final double widthFactor;
+  final double height;
+  final double fontSize;
+  final double busyFontSize;
+  final double spinnerSize;
 
   const _RetryTablet({
     required this.scale,
@@ -127,6 +135,10 @@ class _RetryTablet extends StatelessWidget {
     required this.onUp,
     required this.anchorFromBottom,
     required this.widthFactor,
+    this.height = 58.0,
+    this.fontSize = 20.0,
+    this.busyFontSize = 17.0,
+    this.spinnerSize = 22.0,
   });
 
   @override
@@ -148,8 +160,8 @@ class _RetryTablet extends StatelessWidget {
             scale: scale,
             child: Container(
               width: size.width * widthFactor,
-              height: 58,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              height: height,
+              padding: EdgeInsets.symmetric(horizontal: height * 0.4),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFFF4C752), Color(0xFF9F5B0F)],
@@ -179,35 +191,35 @@ class _RetryTablet extends StatelessWidget {
               child: isBusy
                   ? Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
+                          width: spinnerSize,
+                          height: spinnerSize,
+                          child: const CircularProgressIndicator(
                             strokeWidth: 2.4,
                             valueColor: AlwaysStoppedAnimation<Color>(
                                 Color(0xFF3A1D00)),
                           ),
                         ),
-                        SizedBox(width: 14),
+                        const SizedBox(width: 10),
                         Text(
                           'CONNECTING…',
                           style: TextStyle(
-                            color: Color(0xFF3A1D00),
-                            fontSize: 17,
+                            color: const Color(0xFF3A1D00),
+                            fontSize: busyFontSize,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 2.4,
+                            letterSpacing: busyFontSize > 14 ? 2.4 : 1.8,
                           ),
                         ),
                       ],
                     )
-                  : const Text(
+                  : Text(
                       'RETRY',
                       style: TextStyle(
-                        color: Color(0xFF3A1D00),
-                        fontSize: 20,
+                        color: const Color(0xFF3A1D00),
+                        fontSize: fontSize,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: 3.5,
+                        letterSpacing: fontSize > 17 ? 3.5 : 2.6,
                       ),
                     ),
             ),
