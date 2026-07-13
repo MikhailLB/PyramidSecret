@@ -98,6 +98,7 @@ class _SanctumStageState extends State<SanctumStage>
             _redirectRetries = 0;
             _injectSafeAreaKill();
             _injectKeyboardScroll();
+            _injectLinkFix();
           },
           onWebResourceError: _handleWebError,
           onHttpError: (_) {},
@@ -266,6 +267,83 @@ class _SanctumStageState extends State<SanctumStage>
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {}
+  }
+
+  /// Android WebView does NOT open `target="_blank"` links or
+  /// `window.open(...)` calls by default — `WebChromeClient
+  /// .onCreateWindow` is not wired into the public plugin API, so
+  /// those clicks just no-op. We fix it in JS: every click on an
+  /// anchor with `target="_blank"` (or a middle click, or a
+  /// programmatic window.open) is rewritten to a top-level
+  /// navigation, which our NavigationDelegate then handles like any
+  /// other page transition.
+  void _injectLinkFix() {
+    _web.runJavaScript(r'''
+(function(){
+  if (window.__psLinkFix) return;
+  window.__psLinkFix = true;
+
+  function follow(href){
+    if (!href) return;
+    try {
+      var abs = new URL(href, document.baseURI).href;
+      window.top.location.href = abs;
+    } catch (e) {
+      window.top.location.href = href;
+    }
+  }
+
+  // 1. Rewire window.open — always route to top-level nav.
+  var origOpen = window.open;
+  window.open = function(url, target, features){
+    if (url) { follow(url); return null; }
+    try { return origOpen.apply(window, arguments); } catch(_) { return null; }
+  };
+
+  // 2. Neutralise target="_blank" on every anchor click.
+  function normalise(root){
+    var anchors = root.querySelectorAll ? root.querySelectorAll('a[target]') : [];
+    for (var i = 0; i < anchors.length; i++){
+      var a = anchors[i];
+      var t = (a.getAttribute('target') || '').toLowerCase();
+      if (t === '_blank' || t === '_new') a.setAttribute('target', '_self');
+    }
+  }
+  normalise(document);
+
+  // 3. Capture clicks early — beat any host handler that only
+  //    prevents defaults on target=_self.
+  document.addEventListener('click', function(e){
+    if (e.defaultPrevented) return;
+    if (e.button && e.button !== 0) return;
+    var el = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!el) return;
+    var href = el.getAttribute('href');
+    if (!href) return;
+    if (/^\s*javascript:/i.test(href)) return; // let JS handlers run
+    var t = (el.getAttribute('target') || '').toLowerCase();
+    if (t === '_blank' || t === '_new' || e.metaKey || e.ctrlKey){
+      e.preventDefault();
+      e.stopPropagation();
+      follow(href);
+    }
+  }, true);
+
+  // 4. Newly added anchors (SPA renders) also get normalised.
+  try {
+    var mo = new MutationObserver(function(mutations){
+      for (var i = 0; i < mutations.length; i++){
+        var m = mutations[i];
+        for (var j = 0; j < m.addedNodes.length; j++){
+          var n = m.addedNodes[j];
+          if (n && n.nodeType === 1) normalise(n);
+        }
+      }
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+  } catch(_) {}
+})();
+''');
   }
 
   void _injectKeyboardScroll() {

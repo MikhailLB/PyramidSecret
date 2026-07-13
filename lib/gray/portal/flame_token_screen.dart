@@ -104,13 +104,17 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _AcceptTablet(
+                  _ShrineTablet(
                     width: size.width * (isLandscape ? 0.36 : 0.72),
+                    label: 'ACCEPT',
+                    withShine: true,
                     onTap: _accept,
                   ),
                   const SizedBox(height: 14),
-                  _SkipTablet(
-                    width: size.width * (isLandscape ? 0.30 : 0.60),
+                  _ShrineTablet(
+                    width: size.width * (isLandscape ? 0.36 : 0.72),
+                    label: 'SKIP',
+                    withShine: false,
                     onTap: _skip,
                   ),
                 ],
@@ -123,113 +127,106 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   }
 }
 
-class _AcceptTablet extends StatefulWidget {
+/// Shrine-styled action tablet used for both Accept and Skip so the
+/// pair share the exact same gradient, border, radius, height and
+/// text metrics. Only the pulsing outer glow is optional — Accept
+/// gets it, Skip does not, so the visual hierarchy still reads
+/// "primary / secondary" without changing the button's physique.
+class _ShrineTablet extends StatefulWidget {
   final double width;
+  final String label;
+  final bool withShine;
   final VoidCallback onTap;
-  const _AcceptTablet({required this.width, required this.onTap});
+
+  const _ShrineTablet({
+    required this.width,
+    required this.label,
+    required this.onTap,
+    this.withShine = false,
+  });
+
   @override
-  State<_AcceptTablet> createState() => _AcceptTabletState();
+  State<_ShrineTablet> createState() => _ShrineTabletState();
 }
 
-class _AcceptTabletState extends State<_AcceptTablet>
+class _ShrineTabletState extends State<_ShrineTablet>
     with SingleTickerProviderStateMixin {
   bool _pressed = false;
-  late final AnimationController _shineCtrl;
-  late final Animation<double> _shine;
+  AnimationController? _shineCtrl;
+  Animation<double>? _shine;
 
   @override
   void initState() {
     super.initState();
-    _shineCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-    _shine = Tween<double>(begin: 0.25, end: 0.6).animate(
-      CurvedAnimation(parent: _shineCtrl, curve: Curves.easeInOut),
-    );
+    if (widget.withShine) {
+      _shineCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1400),
+      )..repeat(reverse: true);
+      _shine = Tween<double>(begin: 0.25, end: 0.6).animate(
+        CurvedAnimation(parent: _shineCtrl!, curve: Curves.easeInOut),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _shineCtrl.dispose();
+    _shineCtrl?.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedBuilder(
-        animation: _shine,
-        builder: (_, __) => AnimatedScale(
-          scale: _pressed ? 0.96 : 1.0,
-          duration: const Duration(milliseconds: 90),
-          child: Container(
-            width: widget.width,
-            height: 60,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: _pressed
-                    ? const [Color(0xFFD59A2C), Color(0xFF7A400C)]
-                    : const [Color(0xFFFFE38F), Color(0xFFB0641A)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: const Color(0xFFFFF3C1),
-                width: 2.6,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFF4C752).withValues(alpha: _shine.value),
-                  blurRadius: 22,
-                  spreadRadius: _shine.value * 3,
-                  offset: const Offset(0, 4),
-                ),
-                const BoxShadow(
-                  color: Colors.black45,
-                  blurRadius: 10,
-                  offset: Offset(0, 5),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'ACCEPT',
-              style: TextStyle(
-                color: Color(0xFF2A1200),
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 3.2,
-              ),
-            ),
+  BoxDecoration _decoration(double shineAlpha) {
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: _pressed
+            ? const [Color(0xFFD59A2C), Color(0xFF7A400C)]
+            : const [Color(0xFFFFE38F), Color(0xFFB0641A)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: const Color(0xFFFFF3C1),
+        width: 2.6,
+      ),
+      boxShadow: [
+        if (shineAlpha > 0)
+          BoxShadow(
+            color: const Color(0xFFF4C752).withValues(alpha: shineAlpha),
+            blurRadius: 22,
+            spreadRadius: shineAlpha * 3,
+            offset: const Offset(0, 4),
+          ),
+        const BoxShadow(
+          color: Colors.black45,
+          blurRadius: 10,
+          offset: Offset(0, 5),
+        ),
+      ],
+    );
+  }
+
+  Widget _tablet(double shineAlpha) {
+    return AnimatedScale(
+      scale: _pressed ? 0.96 : 1.0,
+      duration: const Duration(milliseconds: 90),
+      child: Container(
+        width: widget.width,
+        height: 60,
+        decoration: _decoration(shineAlpha),
+        alignment: Alignment.center,
+        child: Text(
+          widget.label,
+          style: const TextStyle(
+            color: Color(0xFF2A1200),
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 3.2,
           ),
         ),
       ),
     );
   }
-}
-
-/// Secondary tablet — reuses the Accept gradient so the buttons feel
-/// like part of the same shrine, but sits slightly lower + smaller
-/// without the pulsing glow so the visual hierarchy still reads
-/// "Accept first, Skip second".
-class _SkipTablet extends StatefulWidget {
-  final double width;
-  final VoidCallback onTap;
-  const _SkipTablet({required this.width, required this.onTap});
-  @override
-  State<_SkipTablet> createState() => _SkipTabletState();
-}
-
-class _SkipTabletState extends State<_SkipTablet> {
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -240,45 +237,13 @@ class _SkipTabletState extends State<_SkipTablet> {
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 90),
-        child: Container(
-          width: widget.width,
-          height: 48,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: _pressed
-                  ? const [Color(0xFFD59A2C), Color(0xFF7A400C)]
-                  : const [Color(0xFFFFE38F), Color(0xFFB0641A)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+      child: _shine == null
+          ? _tablet(0)
+          : AnimatedBuilder(
+              animation: _shine!,
+              builder: (_, _) => _tablet(_shine!.value),
             ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFFFFF3C1),
-              width: 2.2,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black45,
-                blurRadius: 8,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            'SKIP',
-            style: TextStyle(
-              color: Color(0xFF2A1200),
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 3.0,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
+
