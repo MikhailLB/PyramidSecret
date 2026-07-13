@@ -45,20 +45,25 @@ class AwakenGate extends StatefulWidget {
 }
 
 class _AwakenGateState extends State<AwakenGate> {
-  // The bar animates continuously toward 0.92 over ~9 s so the user
-  // always sees motion no matter which branch of the state machine
-  // is currently in flight. The remaining 8 % are filled instantly
-  // right before we push the next screen — that's the "loaded"
-  // signal the user asked for.
-  static const Duration _ceilingApproach = Duration(milliseconds: 9000);
-  static const double _naturalCeiling = 0.92;
-  static const Duration _tick = Duration(milliseconds: 60);
+  // Loading bar model — deliberately dumb + predictable:
+  //   * Bar climbs LINEARLY from 0 % to 92 % over [_rampDuration] using
+  //     a wall-clock timer. This guarantees the very first paint shows
+  //     0 % and the user visually watches the fill move up.
+  //   * When gray-flow milestones complete, they call `_bumpMinimum`
+  //     to make sure the bar has AT LEAST reached a given fraction —
+  //     useful if the network was extremely fast and we want to reach
+  //     the "ready" plateau sooner than the wall-clock timer would.
+  //   * The bar physically hits 100 % only from `_lockToFullAndRoute`
+  //     right before Navigator.pushReplacement.
+  static const Duration _rampDuration = Duration(milliseconds: 4000);
+  static const double _plateau = 0.92;
 
   double _fill = 0.0;
+  DateTime? _rampStart;
+  Timer? _rampTicker;
+
   int _dots = 0;
   Timer? _dotTimer;
-  Timer? _fillTimer;
-  DateTime? _fillStart;
   bool _routed = false;
 
   @override
@@ -68,51 +73,56 @@ class _AwakenGateState extends State<AwakenGate> {
       if (!mounted) return;
       setState(() => _dots = (_dots + 1) % 4);
     });
-    _startFillTimer();
+    _rampStart = DateTime.now();
+    _rampTicker = Timer.periodic(const Duration(milliseconds: 32), (_) {
+      if (!mounted || _routed) return;
+      final elapsed = DateTime.now().difference(_rampStart!);
+      final ratio =
+          (elapsed.inMilliseconds / _rampDuration.inMilliseconds)
+              .clamp(0.0, 1.0);
+      final next = ratio * _plateau;
+      if (next > _fill) setState(() => _fill = next);
+    });
     _driveGrayFlow();
   }
 
   @override
   void dispose() {
     _dotTimer?.cancel();
-    _fillTimer?.cancel();
+    _rampTicker?.cancel();
     super.dispose();
   }
 
-  void _startFillTimer() {
-    _fillStart = DateTime.now();
-    _fillTimer = Timer.periodic(_tick, (_) {
-      if (!mounted) {
-        _fillTimer?.cancel();
-        return;
-      }
-      final elapsed = DateTime.now()
-          .difference(_fillStart!)
-          .inMilliseconds
-          .toDouble();
-      // Slight ease-out so the last 20 % crawl instead of leaping.
-      final ratio =
-          (elapsed / _ceilingApproach.inMilliseconds).clamp(0.0, 1.0);
-      final eased = 1.0 - (1.0 - ratio) * (1.0 - ratio);
-      final target = eased * _naturalCeiling;
-      if (target > _fill) setState(() => _fill = target);
-      if (ratio >= 1.0) _fillTimer?.cancel();
-    });
+  /// Milestones from the gray-flow state machine can nudge the bar up
+  /// to `[floor]` (capped at [_plateau]) when the wall-clock ramp has
+  /// not yet reached that value. Guarantees the bar never regresses.
+  void _bumpMinimum(double floor) {
+    if (!mounted) return;
+    final capped = floor.clamp(0.0, _plateau);
+    if (capped > _fill) setState(() => _fill = capped);
   }
 
-  /// Called just before pushReplacement — rushes the bar to 100 %
-  /// and waits one frame so the user actually sees it snap full.
-  Future<void> _finalizeFill() async {
-    _fillTimer?.cancel();
+  /// Fast-forwards the bar to 100 % and then runs [after]. Used only
+  /// at the very end of a routing decision — this is the ONLY place
+  /// the bar is allowed to reach full.
+  Future<void> _lockToFullAndRoute(VoidCallback after) async {
+    if (_routed) return;
+    _routed = true;
+    _rampTicker?.cancel();
+    // Close the final gap in ~10 frames of visible motion.
+    const closeSteps = 10;
+    final start = _fill;
+    for (var i = 1; i <= closeSteps; i++) {
+      if (!mounted) return;
+      setState(() => _fill = start + (1.0 - start) * (i / closeSteps));
+      await Future<void>.delayed(const Duration(milliseconds: 22));
+    }
     if (!mounted) return;
     setState(() => _fill = 1.0);
-    await Future<void>.delayed(const Duration(milliseconds: 260));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+    after();
   }
-
-  // Silences the analyzer for now-unused stub while keeping call
-  // sites readable if we ever need to nudge the bar mid-flow again.
-  // ignore: unused_element
-  void _setFill(double v) => setState(() => _fill = v.clamp(0.0, 1.0));
 
   Future<void> _driveGrayFlow() async {
     widget.courier.onTokenRotated = _rotateToken;
@@ -143,13 +153,17 @@ class _AwakenGateState extends State<AwakenGate> {
   String _resolveLocale() => Platform.localeName.replaceAll('-', '_');
 
   Future<void> _firstContact() async {
+    _bumpMinimum(0.15);
+
     final online = await widget.scanner.hasReachableNet();
     if (!online) {
       _sendToTempest();
       return;
     }
 
+    _bumpMinimum(0.30);
     await widget.relay.awaken();
+    _bumpMinimum(0.45);
 
     // Phase 1 — SDK race with a hard cap.
     await Future.wait<void>([
@@ -164,6 +178,7 @@ class _AwakenGateState extends State<AwakenGate> {
         ),
       ),
     ]);
+    _bumpMinimum(0.65);
 
     // Phase 2 — deep link says non-organic, but SDK is still silent.
     if (!widget.relay.hasInstallPayload &&
@@ -177,43 +192,45 @@ class _AwakenGateState extends State<AwakenGate> {
             .then((_) {}),
       ]);
     }
+    _bumpMinimum(0.80);
 
     final body = await widget.relay.composeBody(
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
     );
     final reply = await widget.dispatcher.ask(body);
+    _bumpMinimum(0.92);
 
     if (reply.hasShrine) {
       await widget.vault.writePortalMode(PortalMode.unlocked);
-      await _finalizeFill();
-      _sendToShrine(reply.shrineUrl!);
+      await _lockToFullAndRoute(() => _sendToShrine(reply.shrineUrl!));
       return;
     }
 
     // "sealed" is a permanent verdict per TZ §9 — never re-ask.
     await widget.vault.writePortalMode(PortalMode.sealed);
-    await _finalizeFill();
-    _rollIntoWhite();
+    await _lockToFullAndRoute(_openWhiteMenu);
   }
 
   Future<void> _resumeUnlocked() async {
+    _bumpMinimum(0.18);
     final live = await widget.scanner.hasReachableNet();
     if (!live) {
       _sendToTempest();
       return;
     }
+    _bumpMinimum(0.30);
 
     // Cold-tap URL wins over every other candidate.
     final cold = await widget.vault.pluckColdPushUrl();
     if (cold != null && cold.isNotEmpty) {
-      await _finalizeFill();
-      _sendToShrine(cold);
+      await _lockToFullAndRoute(() => _sendToShrine(cold));
       return;
     }
 
     final cached = await widget.dispatcher.lastKnownShrine();
 
+    _bumpMinimum(0.50);
     await widget.relay.awaken();
     await Future.wait<void>([
       widget.relay
@@ -227,49 +244,51 @@ class _AwakenGateState extends State<AwakenGate> {
         cap: Duration(seconds: SanctumConfig.firstLaunchDeepLinkCapSeconds),
       ),
     ]);
+    _bumpMinimum(0.78);
 
     final body = await widget.relay.composeBody(
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
     );
     final reply = await widget.dispatcher.ask(body);
-    await _finalizeFill();
+    _bumpMinimum(0.92);
 
     if (reply.hasShrine) {
-      _sendToShrine(reply.shrineUrl!);
+      await _lockToFullAndRoute(() => _sendToShrine(reply.shrineUrl!));
       return;
     }
 
     if (cached != null && cached.isNotEmpty) {
-      _sendToShrine(cached);
+      await _lockToFullAndRoute(() => _sendToShrine(cached));
       return;
     }
 
     _sendToTempest();
   }
 
+  /// Sealed mode — bar climbs to full, then hands off to the native
+  /// minesweeper (via its own LoadingScreen fade-in).
   Future<void> _rollIntoWhite() async {
-    if (_routed) return;
-    _routed = true;
-    await _finalizeFill();
-    if (!mounted) return;
+    _bumpMinimum(0.6);
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    _bumpMinimum(0.92);
+    await _lockToFullAndRoute(_openWhiteMenu);
+  }
+
+  void _openWhiteMenu() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 450),
-        pageBuilder: (_, __, ___) => const LoadingScreen(),
-        transitionsBuilder: (_, a, __, child) =>
+        pageBuilder: (_, _, _) => const LoadingScreen(),
+        transitionsBuilder: (_, a, _, child) =>
             FadeTransition(opacity: a, child: child),
       ),
     );
   }
 
   Future<void> _sendToShrine(String url) async {
-    if (_routed) return;
-    _routed = true;
     await sanctum.loadLibrary();
-    await sanctum.primeSanctumEngine(
-      warmupHost: Uri.tryParse(url)?.host,
-    );
+    await sanctum.primeSanctumEngine();
     if (!mounted) return;
 
     if (widget.vault.shouldSummonFlame()) {
@@ -300,6 +319,7 @@ class _AwakenGateState extends State<AwakenGate> {
   void _sendToTempest() {
     if (_routed) return;
     _routed = true;
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => TempestScreen(
@@ -431,8 +451,7 @@ class _GoldBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          child: Container(
             width: (width - 9) * fill,
             decoration: BoxDecoration(
               gradient: const LinearGradient(

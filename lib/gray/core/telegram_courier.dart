@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'desert_transport.dart';
 import 'vault_locker.dart';
@@ -76,18 +77,13 @@ class TelegramCourier {
   Future<void> awaken() async {
     if (_booted) return;
 
-    // Local-notification plugin init is independent of Firebase — do
-    // it first so requestNotificationsPermission() works even when
-    // google-services.json is misconfigured.
-    try {
-      await _prepareLocal();
-    } catch (_) {}
-
     try {
       await Firebase.initializeApp();
       _fcm = FirebaseMessaging.instance;
 
       FirebaseMessaging.onBackgroundMessage(_backgroundMessageDrop);
+
+      await _prepareLocal();
 
       _token = await _fcm!.getToken();
 
@@ -146,31 +142,39 @@ class TelegramCourier {
     }
   }
 
+  /// Surfaces the system permission dialog and stores the verdict.
+  ///
+  /// On Android 13+ the reliable trigger is `Permission.notification
+  /// .request()` from `permission_handler`. Some device/FCM
+  /// combinations swallow the request that `FirebaseMessaging
+  /// .requestPermission` sends internally when Firebase is still
+  /// warming up on the first launch, so we drive the OS dialog
+  /// directly and only fall back to the FCM call when Firebase is
+  /// already alive (so the SDK subscribes for background messages).
   Future<bool> requestFlamePermission() async {
-    var granted = false;
-    var explicitlyDenied = false;
-
-    // Android 13+ (API 33): POST_NOTIFICATIONS is a runtime permission
-    // that must be requested through the AndroidFlutterLocalNotifications
-    // plugin — FirebaseMessaging.requestPermission() does NOT surface
-    // the system dialog on Android by itself, only on iOS.
-    if (Platform.isAndroid) {
-      final android = _local.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      if (android != null) {
-        try {
-          final result = await android.requestNotificationsPermission();
-          if (result == true) granted = true;
-          if (result == false) explicitlyDenied = true;
-        } catch (_) {}
-        // On Android < 13, requestNotificationsPermission returns true
-        // instantly and the OS treats notifications as allowed.
-      }
+    // 1. System dialog via permission_handler — always fires on
+    //    Android 13+ as long as the manifest declares POST_NOTIFICATIONS.
+    //    On Android <13 the permission is implicitly granted and
+    //    `request()` resolves without a UI prompt.
+    PermissionStatus osStatus;
+    try {
+      osStatus = await Permission.notification.request();
+    } catch (_) {
+      osStatus = PermissionStatus.denied;
     }
 
-    // iOS: keep the FirebaseMessaging flow so authorizationStatus
-    // properly reflects Provisional / Denied on that platform.
-    if (!granted && _fcm != null) {
+    final granted = osStatus.isGranted || osStatus.isLimited;
+
+    await _vault.markFlameGranted(granted);
+    if (osStatus.isPermanentlyDenied) {
+      await _vault.markFlameOsDenied();
+    }
+
+    // 2. If Firebase is up, hand the same request to FCM so it
+    //    subscribes for background delivery. If Firebase is not
+    //    configured yet the whole call is a no-op — we still return
+    //    the OS verdict from step 1.
+    if (_fcm != null) {
       try {
         final settings = await _fcm!.requestPermission(
           alert: true,
@@ -178,20 +182,12 @@ class TelegramCourier {
           sound: true,
           provisional: false,
         );
-        final status = settings.authorizationStatus;
-        granted = status == AuthorizationStatus.authorized ||
-            status == AuthorizationStatus.provisional;
-        if (status == AuthorizationStatus.denied) explicitlyDenied = true;
+        if (settings.authorizationStatus == AuthorizationStatus.denied) {
+          await _vault.markFlameOsDenied();
+        }
       } catch (_) {}
     }
 
-    await _vault.markFlameGranted(granted);
-    if (explicitlyDenied && !granted) {
-      // The OS won't show the dialog again if the user tapped Deny —
-      // remember so we never re-prompt (pitfall around the 3-day
-      // Skip loop showing a broken Accept button).
-      await _vault.markFlameOsDenied();
-    }
     return granted;
   }
 

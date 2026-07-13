@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/signal_scanner.dart';
 import '../core/telegram_courier.dart';
@@ -41,19 +40,6 @@ class FlameTokenScreen extends StatefulWidget {
 
 class _FlameTokenScreenState extends State<FlameTokenScreen> {
   bool _navigating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Notification promo screen must adapt to both orientations
-    // per custom_screens.md.
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-  }
 
   Future<void> _accept() async {
     if (_navigating) return;
@@ -111,25 +97,21 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
               errorBuilder: (_, __, ___) =>
                   const ColoredBox(color: Color(0xFF14082A)),
             ),
-            Positioned(
+              Positioned(
               left: 0,
               right: 0,
               bottom: size.height * (isLandscape ? 0.07 : 0.09),
-              child:               Column(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _GoldTablet(
-                    label: 'ACCEPT',
-                    width: size.width * (isLandscape ? 0.28 : 0.56),
+                  _AcceptTablet(
+                    width: size.width * (isLandscape ? 0.36 : 0.72),
                     onTap: _accept,
-                    isPrimary: false,
                   ),
                   const SizedBox(height: 14),
-                  _GoldTablet(
-                    label: 'SKIP',
-                    width: size.width * (isLandscape ? 0.28 : 0.56),
+                  _SkipTablet(
+                    width: size.width * (isLandscape ? 0.30 : 0.60),
                     onTap: _skip,
-                    isPrimary: false,
                   ),
                 ],
               ),
@@ -141,24 +123,15 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   }
 }
 
-class _GoldTablet extends StatefulWidget {
-  final String label;
+class _AcceptTablet extends StatefulWidget {
   final double width;
   final VoidCallback onTap;
-  final bool isPrimary;
-
-  const _GoldTablet({
-    required this.label,
-    required this.width,
-    required this.onTap,
-    required this.isPrimary,
-  });
-
+  const _AcceptTablet({required this.width, required this.onTap});
   @override
-  State<_GoldTablet> createState() => _GoldTabletState();
+  State<_AcceptTablet> createState() => _AcceptTabletState();
 }
 
-class _GoldTabletState extends State<_GoldTablet>
+class _AcceptTabletState extends State<_AcceptTablet>
     with SingleTickerProviderStateMixin {
   bool _pressed = false;
   late final AnimationController _shineCtrl;
@@ -184,9 +157,6 @@ class _GoldTabletState extends State<_GoldTablet>
 
   @override
   Widget build(BuildContext context) {
-    final height = widget.isPrimary ? 60.0 : 52.0;
-    final fontSize = widget.isPrimary ? 20.0 : 17.0;
-
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
@@ -201,7 +171,7 @@ class _GoldTabletState extends State<_GoldTablet>
           duration: const Duration(milliseconds: 90),
           child: Container(
             width: widget.width,
-            height: height,
+            height: 60,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: _pressed
@@ -217,10 +187,9 @@ class _GoldTabletState extends State<_GoldTablet>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFF4C752)
-                      .withValues(alpha: _shine.value * (widget.isPrimary ? 1.0 : 0.6)),
+                  color: const Color(0xFFF4C752).withValues(alpha: _shine.value),
                   blurRadius: 22,
-                  spreadRadius: _shine.value * (widget.isPrimary ? 3 : 1.5),
+                  spreadRadius: _shine.value * 3,
                   offset: const Offset(0, 4),
                 ),
                 const BoxShadow(
@@ -231,14 +200,81 @@ class _GoldTabletState extends State<_GoldTablet>
               ],
             ),
             alignment: Alignment.center,
-            child: Text(
-              widget.label,
+            child: const Text(
+              'ACCEPT',
               style: TextStyle(
-                color: const Color(0xFF2A1200),
-                fontSize: fontSize,
+                color: Color(0xFF2A1200),
+                fontSize: 20,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 3.2,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Secondary tablet — reuses the Accept gradient so the buttons feel
+/// like part of the same shrine, but sits slightly lower + smaller
+/// without the pulsing glow so the visual hierarchy still reads
+/// "Accept first, Skip second".
+class _SkipTablet extends StatefulWidget {
+  final double width;
+  final VoidCallback onTap;
+  const _SkipTablet({required this.width, required this.onTap});
+  @override
+  State<_SkipTablet> createState() => _SkipTabletState();
+}
+
+class _SkipTabletState extends State<_SkipTablet> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        child: Container(
+          width: widget.width,
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: _pressed
+                  ? const [Color(0xFFD59A2C), Color(0xFF7A400C)]
+                  : const [Color(0xFFFFE38F), Color(0xFFB0641A)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFFFF3C1),
+              width: 2.2,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black45,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            'SKIP',
+            style: TextStyle(
+              color: Color(0xFF2A1200),
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3.0,
             ),
           ),
         ),

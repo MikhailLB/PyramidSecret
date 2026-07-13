@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 // ────────────────────────────────────────────────────────────
 // TempestScreen — offline / no-wifi fallback.
@@ -30,15 +29,6 @@ class _TempestScreenState extends State<TempestScreen>
   @override
   void initState() {
     super.initState();
-    // Per custom_screens.md — the no-wifi screen must adapt to
-    // both portrait and landscape. Force-clear any previous
-    // portrait lock so the device can rotate freely here.
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
     _pressCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 140),

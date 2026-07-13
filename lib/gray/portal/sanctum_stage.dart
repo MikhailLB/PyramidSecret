@@ -27,15 +27,9 @@ import 'tempest_screen.dart';
 // Also handles third-party cookies, file uploads, video autoplay,
 // warm push URL delivery, cold-tap recovery.
 
-Future<void> primeSanctumEngine({String? warmupHost}) async {
-  // Best-effort DNS lookup so the WebView's first request skips the
-  // cold-lookup penalty on cellular. Non-blocking — 400 ms cap, every
-  // failure is swallowed.
-  if (warmupHost == null) return;
-  try {
-    await InternetAddress.lookup(warmupHost)
-        .timeout(const Duration(milliseconds: 400));
-  } catch (_) {}
+Future<void> primeSanctumEngine() async {
+  // Warmup hook — kept explicit so the splash can `await` on it
+  // right after the deferred `loadLibrary()` call.
 }
 
 class SanctumStage extends StatefulWidget {

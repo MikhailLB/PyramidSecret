@@ -55,12 +55,14 @@ class DesertTransport extends http.BaseClient {
       final info = DeviceInfoPlugin();
       if (Platform.isAndroid) {
         final droid = await info.androidInfo;
-        // Release version (e.g. "15") — the value real browsers
-        // ship in their UA. `sdkInt` (e.g. 35) is Google-internal
-        // and would immediately flag us as non-human traffic.
+        // `version.release` is the marketing string ("15", "14",
+        // "13"…); `version.sdkInt` returns the API level (35, 34, 33)
+        // which is what real Chrome NEVER uses inside its UA. Google
+        // Play Protect and partner backends flag UAs that carry the
+        // API integer, so always use the marketing release here.
         final release = droid.version.release.isNotEmpty
             ? droid.version.release
-            : droid.version.sdkInt.toString();
+            : '${droid.version.sdkInt}';
         final brand = droid.brand;
         final model = droid.model;
         final build = droid.display.isNotEmpty ? droid.display : droid.id;

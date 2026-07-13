@@ -40,6 +40,11 @@ dependencies:
   firebase_app_check: 0.3.2+8
   flutter_local_notifications: 17.2.4
 
+  # ─── Runtime permissions (needed for Android 13+ POST_NOTIFICATIONS
+  #     since FCM.requestPermission does not always surface the system
+  #     dialog when Firebase is slow to warm up). ───
+  permission_handler: 11.3.1
+
   # ─── Files (WebView upload). Locked to 8.x per gray_part_pitfalls §1. ───
   file_picker: 8.1.4
 
