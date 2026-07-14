@@ -25,10 +25,47 @@ class _WebViewScreenState extends State<WebViewScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) => setState(() => _loading = true),
-          onPageFinished: (_) => setState(() => _loading = false),
+          onPageFinished: (_) {
+            _fitToViewport();
+            setState(() => _loading = false);
+          },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
+  }
+
+  /// The support/privacy HTML on pyramidseccret.com ships without a
+  /// `<meta name="viewport">` tag, so Android WebView renders it as a
+  /// 980 px desktop page — the 400 px card ends up looking tiny in the
+  /// middle of the screen ("сильно отдалился"). Inject a mobile
+  /// viewport once the page settles, force the layout root to match
+  /// device width and kill any horizontal overflow that would produce
+  /// a scroll gutter. Safe to run against pages that already have a
+  /// viewport tag — the setAttribute call is a no-op in that case.
+  void _fitToViewport() {
+    _controller.runJavaScript(r'''
+(function(){
+  try {
+    var v = document.querySelector('meta[name="viewport"]');
+    if (!v) {
+      v = document.createElement('meta');
+      v.setAttribute('name','viewport');
+      (document.head || document.documentElement).appendChild(v);
+    }
+    v.setAttribute('content','width=device-width, initial-scale=1, maximum-scale=5');
+    var s = document.getElementById('__ps_fit');
+    if (!s) {
+      s = document.createElement('style');
+      s.id = '__ps_fit';
+      (document.head || document.documentElement).appendChild(s);
+    }
+    s.textContent =
+      'html,body{margin:0!important;padding:0!important;' +
+        'width:100%!important;max-width:100%!important;' +
+        'overflow-x:hidden!important;-webkit-text-size-adjust:100%!important;}';
+  } catch(e){}
+})();
+''');
   }
 
   @override
