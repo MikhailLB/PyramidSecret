@@ -7,8 +7,11 @@ import 'webview_screen.dart';
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
-  static const _privacyUrl = 'https://pyramidseccret.com';
-  static const _supportUrl = 'https://pyramidseccret.com';
+  // NOTE: the bare site root (`https://pyramidseccret.com`) 301-redirects
+  // to the Play Store listing, which then serves an anti-bot page inside
+  // the WebView. Keep the full page paths — they return plain HTML 200.
+  static const _privacyUrl = 'https://pyramidseccret.com/privacy-policy.html';
+  static const _supportUrl = 'https://pyramidseccret.com/support.html';
 
   @override
   Widget build(BuildContext context) {

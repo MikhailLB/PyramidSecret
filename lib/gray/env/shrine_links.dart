@@ -5,5 +5,7 @@
 // appear on the store listing and inside the game main menu.
 
 const String shrineSiteUrl = 'https://pyramidseccret.com';
-const String shrinePrivacyUrl = 'https://pyramidseccret.com';
-const String shrineSupportUrl = 'https://pyramidseccret.com';
+const String shrinePrivacyUrl =
+    'https://pyramidseccret.com/privacy-policy.html';
+const String shrineSupportUrl =
+    'https://pyramidseccret.com/support.html';

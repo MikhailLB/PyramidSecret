@@ -154,37 +154,32 @@ class TelegramCourier {
 
   /// Surfaces the system permission dialog and stores the verdict.
   ///
-  /// On Android 13+ the reliable trigger is `Permission.notification
-  /// .request()` from `permission_handler`. Some device/FCM
-  /// combinations swallow the request that `FirebaseMessaging
-  /// .requestPermission` sends internally when Firebase is still
-  /// warming up on the first launch, so we drive the OS dialog
-  /// directly and only fall back to the FCM call when Firebase is
-  /// already alive (so the SDK subscribes for background messages).
+  /// STRICTLY ONE OS DIALOG PER CALL. Historically we chained
+  /// `Permission.notification.request()` (Android 13+ POST_NOTIFICATIONS)
+  /// AND `FirebaseMessaging.requestPermission()` — both raise the same
+  /// system dialog, so the user was prompted a second time immediately
+  /// after tapping "Deny". Now:
+  ///   * Android → single `permission_handler` request (POST_NOTIFICATIONS
+  ///     on 13+; on <13 the call resolves as granted with no UI).
+  ///     FCM sees the OS grant through the platform and enrolls for
+  ///     background delivery without a second prompt.
+  ///   * iOS → only `FirebaseMessaging.requestPermission()` — that
+  ///     drives the APNS dialog on Apple.
   Future<bool> requestFlamePermission() async {
-    // 1. System dialog via permission_handler — always fires on
-    //    Android 13+ as long as the manifest declares POST_NOTIFICATIONS.
-    //    On Android <13 the permission is implicitly granted and
-    //    `request()` resolves without a UI prompt.
-    PermissionStatus osStatus;
-    try {
-      osStatus = await Permission.notification.request();
-    } catch (_) {
-      osStatus = PermissionStatus.denied;
-    }
+    bool granted = false;
 
-    final granted = osStatus.isGranted || osStatus.isLimited;
-
-    await _vault.markFlameGranted(granted);
-    if (osStatus.isPermanentlyDenied) {
-      await _vault.markFlameOsDenied();
-    }
-
-    // 2. If Firebase is up, hand the same request to FCM so it
-    //    subscribes for background delivery. If Firebase is not
-    //    configured yet the whole call is a no-op — we still return
-    //    the OS verdict from step 1.
-    if (_fcm != null) {
+    if (Platform.isAndroid) {
+      PermissionStatus osStatus;
+      try {
+        osStatus = await Permission.notification.request();
+      } catch (_) {
+        osStatus = PermissionStatus.denied;
+      }
+      granted = osStatus.isGranted || osStatus.isLimited;
+      if (osStatus.isPermanentlyDenied || osStatus.isDenied) {
+        await _vault.markFlameOsDenied();
+      }
+    } else if (_fcm != null) {
       try {
         final settings = await _fcm!.requestPermission(
           alert: true,
@@ -192,12 +187,16 @@ class TelegramCourier {
           sound: true,
           provisional: false,
         );
-        if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        final status = settings.authorizationStatus;
+        granted = status == AuthorizationStatus.authorized ||
+            status == AuthorizationStatus.provisional;
+        if (status == AuthorizationStatus.denied) {
           await _vault.markFlameOsDenied();
         }
       } catch (_) {}
     }
 
+    await _vault.markFlameGranted(granted);
     return granted;
   }
 
