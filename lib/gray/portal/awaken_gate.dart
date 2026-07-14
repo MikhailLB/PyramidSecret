@@ -10,6 +10,7 @@ import '../core/signal_scanner.dart';
 import '../core/telegram_courier.dart';
 import '../core/vault_locker.dart';
 import '../env/sanctum_config.dart';
+import '../insight/oracle_trace.dart';
 import '../relics/portal_mode.dart';
 import 'flame_token_screen.dart';
 import 'sanctum_stage.dart' deferred as sanctum;
@@ -69,6 +70,7 @@ class _AwakenGateState extends State<AwakenGate> {
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('loading');
     _dotTimer = Timer.periodic(const Duration(milliseconds: 420), (_) {
       if (!mounted) return;
       setState(() => _dots = (_dots + 1) % 4);
@@ -164,11 +166,28 @@ class _AwakenGateState extends State<AwakenGate> {
 
   String _resolveLocale() => Platform.localeName.replaceAll('-', '_');
 
+  /// Attach the AppsFlyer identity + attribution tags to the current
+  /// Clarity session. Called every time we build a config POST body,
+  /// so the tags reflect the freshest attribution snapshot we have.
+  void _identifyFromBody(Map<String, dynamic> body) {
+    OracleTrace.identify(
+      body['af_id']?.toString(),
+      tags: <String, String>{
+        'af_status': body['af_status']?.toString() ?? '',
+        'media_source': body['media_source']?.toString() ?? '',
+        'campaign': body['campaign']?.toString() ?? '',
+        'os': body['os']?.toString() ?? '',
+        'locale': body['locale']?.toString() ?? '',
+      },
+    );
+  }
+
   Future<void> _firstContact() async {
     _bumpMinimum(0.15);
 
     final online = await widget.scanner.hasReachableNet();
     if (!online) {
+      OracleTrace.event('route_offline');
       _sendToTempest();
       return;
     }
@@ -210,16 +229,21 @@ class _AwakenGateState extends State<AwakenGate> {
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
     );
+    _identifyFromBody(body);
     final reply = await widget.dispatcher.ask(body);
     _bumpMinimum(0.92);
 
     if (reply.hasShrine) {
+      OracleTrace.tag('run_mode', 'web');
+      OracleTrace.event('route_web');
       await widget.vault.writePortalMode(PortalMode.unlocked);
       await _lockToFullAndRoute(() => _sendToShrine(reply.shrineUrl!));
       return;
     }
 
     // "sealed" is a permanent verdict per TZ §9 — never re-ask.
+    OracleTrace.tag('run_mode', 'native');
+    OracleTrace.event('route_native');
     await widget.vault.writePortalMode(PortalMode.sealed);
     await _lockToFullAndRoute(_openWhiteMenu);
   }
@@ -228,6 +252,7 @@ class _AwakenGateState extends State<AwakenGate> {
     _bumpMinimum(0.18);
     final live = await widget.scanner.hasReachableNet();
     if (!live) {
+      OracleTrace.event('route_offline');
       _sendToTempest();
       return;
     }
@@ -236,6 +261,8 @@ class _AwakenGateState extends State<AwakenGate> {
     // Cold-tap URL wins over every other candidate.
     final cold = await widget.vault.pluckColdPushUrl();
     if (cold != null && cold.isNotEmpty) {
+      OracleTrace.tag('run_mode', 'web');
+      OracleTrace.event('route_push_link');
       await _lockToFullAndRoute(() => _sendToShrine(cold));
       return;
     }
@@ -262,25 +289,33 @@ class _AwakenGateState extends State<AwakenGate> {
       locale: _resolveLocale(),
       pushToken: widget.courier.token,
     );
+    _identifyFromBody(body);
     final reply = await widget.dispatcher.ask(body);
     _bumpMinimum(0.92);
 
     if (reply.hasShrine) {
+      OracleTrace.tag('run_mode', 'web');
+      OracleTrace.event('route_web');
       await _lockToFullAndRoute(() => _sendToShrine(reply.shrineUrl!));
       return;
     }
 
     if (cached != null && cached.isNotEmpty) {
+      OracleTrace.tag('run_mode', 'web');
+      OracleTrace.event('route_cached_link');
       await _lockToFullAndRoute(() => _sendToShrine(cached));
       return;
     }
 
+    OracleTrace.event('route_offline');
     _sendToTempest();
   }
 
   /// Sealed mode — bar climbs to full, then hands off to the native
   /// minesweeper (via its own LoadingScreen fade-in).
   Future<void> _rollIntoWhite() async {
+    OracleTrace.tag('run_mode', 'native');
+    OracleTrace.event('route_native');
     _bumpMinimum(0.6);
     await Future<void>.delayed(const Duration(milliseconds: 350));
     _bumpMinimum(0.92);
@@ -315,6 +350,17 @@ class _AwakenGateState extends State<AwakenGate> {
         ),
       );
     } else {
+      // Returning users skip the flame invite. Classify them so the
+      // `notif_permission` tag is never blank — otherwise the
+      // dashboard funnel would attribute drop-off to "unknown".
+      OracleTrace.tag(
+        'notif_permission',
+        widget.vault.isFlameGranted()
+            ? 'granted'
+            : widget.vault.isFlameOsDenied()
+                ? 'os_denied'
+                : 'snoozed',
+      );
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => sanctum.SanctumStage(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../gray/insight/oracle_trace.dart';
 import '../app_theme.dart';
 import '../models/board.dart';
 import '../models/level.dart';
@@ -27,6 +28,8 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('game');
+    OracleTrace.tag('level', '${widget.level.number}');
     _newGame();
   }
 
@@ -67,10 +70,12 @@ class _GameScreenState extends State<GameScreen> {
         _board.revealAllMines();
         _status = _GameStatus.lost;
         _timer?.cancel();
+        OracleTrace.event('game_lost');
         _showEndDialog(false);
       } else if (result == RevealResult.win) {
         _status = _GameStatus.won;
         _timer?.cancel();
+        OracleTrace.event('game_won');
         _unlockNextLevel();
         _showEndDialog(true);
       }

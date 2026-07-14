@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../gray/insight/oracle_trace.dart';
 import '../app_theme.dart';
 import 'levels_screen.dart';
 import 'webview_screen.dart';
 
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
   // NOTE: the bare site root (`https://pyramidseccret.com`) 301-redirects
@@ -12,6 +13,17 @@ class MainMenuScreen extends StatelessWidget {
   // the WebView. Keep the full page paths — they return plain HTML 200.
   static const _privacyUrl = 'https://pyramidseccret.com/privacy-policy.html';
   static const _supportUrl = 'https://pyramidseccret.com/support.html';
+
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
+  @override
+  void initState() {
+    super.initState();
+    OracleTrace.screen('menu');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,13 +54,27 @@ class MainMenuScreen extends StatelessWidget {
                   EgyptButton(
                     label: 'PRIVACY POLICY',
                     icon: Icons.privacy_tip_outlined,
-                    onTap: () => _openWeb(context, _privacyUrl, 'Privacy Policy'),
+                    onTap: () {
+                      OracleTrace.event('menu_privacy');
+                      _openWeb(
+                        context,
+                        MainMenuScreen._privacyUrl,
+                        'Privacy Policy',
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   EgyptButton(
                     label: 'SUPPORT',
                     icon: Icons.support_agent_rounded,
-                    onTap: () => _openWeb(context, _supportUrl, 'Support'),
+                    onTap: () {
+                      OracleTrace.event('menu_support');
+                      _openWeb(
+                        context,
+                        MainMenuScreen._supportUrl,
+                        'Support',
+                      );
+                    },
                   ),
                   const SizedBox(height: 40),
                 ],

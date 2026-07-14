@@ -1,3 +1,4 @@
+import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import 'gray/core/portal_dispatcher.dart';
 import 'gray/core/signal_scanner.dart';
 import 'gray/core/telegram_courier.dart';
 import 'gray/core/vault_locker.dart';
+import 'gray/insight/oracle_trace.dart';
 import 'root.dart';
 
 // ────────────────────────────────────────────────────────────
@@ -65,11 +67,20 @@ Future<void> main() async {
   final dispatcher = PortalDispatcher(vault);
   final courier = TelegramCourier(vault);
 
-  runApp(PyramidSecretRoot(
-    vault: vault,
-    scanner: scanner,
-    relay: relay,
-    dispatcher: dispatcher,
-    courier: courier,
+  // Wrap the root in ClarityWidget so Microsoft Clarity can capture
+  // the NATIVE Flutter surface (loading gate, push invite, native
+  // game, WebView container). Session replay + custom events wired
+  // through `OracleTrace` answer the "which screen did the paid user
+  // drop off on?" question — see the analytics guide for the full
+  // funnel breakdown.
+  runApp(ClarityWidget(
+    clarityConfig: OracleTrace.config,
+    app: PyramidSecretRoot(
+      vault: vault,
+      scanner: scanner,
+      relay: relay,
+      dispatcher: dispatcher,
+      courier: courier,
+    ),
   ));
 }

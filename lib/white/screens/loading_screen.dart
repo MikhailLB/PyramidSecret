@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../gray/insight/oracle_trace.dart';
 import '../app_theme.dart';
 import '../orientation.dart';
 import 'main_menu_screen.dart';
@@ -27,6 +28,7 @@ class _LoadingScreenState extends State<LoadingScreen>
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('native_loading');
     allowAllOrientations();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _startLoading();

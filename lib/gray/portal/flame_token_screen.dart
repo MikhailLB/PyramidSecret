@@ -5,6 +5,7 @@ import '../core/signal_scanner.dart';
 import '../core/telegram_courier.dart';
 import '../core/vault_locker.dart';
 import '../env/sanctum_config.dart';
+import '../insight/oracle_trace.dart';
 import 'sanctum_stage.dart' deferred as sanctum;
 
 // ────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('push_invite');
     // Portrait & landscape background assets ship in the bundle, so
     // let the device rotate freely on this promo. Without an explicit
     // unlock the portrait lock set by the native game earlier in the
@@ -60,7 +62,10 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   Future<void> _accept() async {
     if (_navigating) return;
     _navigating = true;
-    await widget.courier.requestFlamePermission();
+    OracleTrace.event('push_invite_accept');
+    final bool granted = await widget.courier.requestFlamePermission();
+    OracleTrace.tag('notif_permission', granted ? 'granted' : 'denied');
+    OracleTrace.event(granted ? 'push_granted' : 'push_denied');
     if (!mounted) return;
     _openSanctum();
   }
@@ -68,6 +73,8 @@ class _FlameTokenScreenState extends State<FlameTokenScreen> {
   Future<void> _skip() async {
     if (_navigating) return;
     _navigating = true;
+    OracleTrace.event('push_invite_skip');
+    OracleTrace.tag('notif_permission', 'skipped');
     final defer = DateTime.now().millisecondsSinceEpoch ~/ 1000 +
         SanctumConfig.flameDeferSeconds;
     await widget.vault.deferFlameUntil(defer);

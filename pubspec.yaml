@@ -2,7 +2,7 @@ name: pyramid_secret
 description: "Pyramid Secret — Egyptian themed minesweeper game."
 publish_to: 'none'
 
-version: 1.0.1+4
+version: 1.0.1+5
 
 environment:
   sdk: ^3.12.2
@@ -54,6 +54,7 @@ dependencies:
 
   # ─── Files (WebView upload). Locked to 8.x per gray_part_pitfalls §1. ───
   file_picker: 8.1.4
+  clarity_flutter: ^1.9.0
 
 dev_dependencies:
   flutter_test:

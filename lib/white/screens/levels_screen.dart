@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../gray/insight/oracle_trace.dart';
 import '../app_theme.dart';
 import '../models/level.dart';
 import 'game_screen.dart';
@@ -18,6 +19,7 @@ class _LevelsScreenState extends State<LevelsScreen> {
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('levels');
     _loadProgress();
   }
 

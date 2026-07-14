@@ -14,6 +14,7 @@ import '../core/signal_scanner.dart';
 import '../core/telegram_courier.dart';
 import '../core/vault_locker.dart';
 import '../env/sanctum_config.dart';
+import '../insight/oracle_trace.dart';
 import 'tempest_screen.dart';
 
 // ────────────────────────────────────────────────────────────
@@ -65,17 +66,42 @@ class _SanctumStageState extends State<SanctumStage>
   bool _errored = false;
   bool _routedAway = false;
 
+  // Clarity funnel state — see OracleTrace notes at the top of this
+  // widget: session replay ignores the WebView DOM, so custom events
+  // are the only way to answer "did the user reach the offer?".
+  bool _offerReached = false;
+  bool _pageHadError = false;
+
   StreamSubscription<List<ConnectivityResult>>? _pulseSub;
   Timer? _offlineDebounce;
 
   String? _lastMainUrl;
   int _redirectRetries = 0;
 
+  // In-page funnel detection — kept static so hot-reload doesn't
+  // recompile the character classes. Non-capturing groups only.
+  static final RegExp _depositRx = RegExp(
+    r'(deposit|cashier|top.?up|replenish|payment|checkout|wallet|'
+    r'пополн|депозит|касс|оплат|внести|платеж)',
+    caseSensitive: false,
+  );
+  static final RegExp _registerRx = RegExp(
+    r'(sign.?up|regist|create.?account|onboarding|'
+    r'регистрац|зарегистр)',
+    caseSensitive: false,
+  );
+  static final RegExp _loginRx = RegExp(
+    r'(sign.?in|log.?in|log.?on|/auth\b|authoriz|войти|вход|авториз)',
+    caseSensitive: false,
+  );
+
   void Function(String url)? _previousWarmHandler;
 
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('web');
+    OracleTrace.event('web_open');
     WidgetsBinding.instance.addObserver(this);
 
     SystemChrome.setPreferredOrientations([
@@ -94,6 +120,7 @@ class _SanctumStageState extends State<SanctumStage>
         NavigationDelegate(
           onPageStarted: (_) {
             if (!mounted) return;
+            _pageHadError = false;
             // Never re-arm the overlay after the first page has
             // painted — subsequent link taps stay on the current
             // page until the new one is ready.
@@ -102,7 +129,7 @@ class _SanctumStageState extends State<SanctumStage>
               if (!_firstLoadDone) _loading = true;
             });
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
             if (!mounted) return;
             if (_errored) return;
             setState(() {
@@ -113,6 +140,8 @@ class _SanctumStageState extends State<SanctumStage>
             _injectSafeAreaKill();
             _injectKeyboardScroll();
             _injectLinkFix();
+            _installInsightProbe();
+            _trackWebPage(url);
           },
           onWebResourceError: _handleWebError,
           onHttpError: (_) {},
@@ -131,10 +160,19 @@ class _SanctumStageState extends State<SanctumStage>
               if (request.isMainFrame) _lastMainUrl = request.url;
               return NavigationDecision.navigate;
             }
+            // External hand-off (tel:, mailto:, deposit intent,
+            // etc.). Log the scheme so the funnel can attribute
+            // deposit / auth intents that leave the WebView.
+            OracleTrace.event('web_external');
+            OracleTrace.tag('web_external_scheme', uri.scheme);
             _launchExternal(uri);
             return NavigationDecision.prevent;
           },
         ),
+      )
+      ..addJavaScriptChannel(
+        'PyramidLens',
+        onMessageReceived: (msg) => _onWebSignal(msg.message),
       )
       ..enableZoom(false);
 
@@ -156,7 +194,15 @@ class _SanctumStageState extends State<SanctumStage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _applyImmersive();
+    if (state == AppLifecycleState.resumed) {
+      _applyImmersive();
+      OracleTrace.event('web_foreground');
+    } else if (state == AppLifecycleState.paused) {
+      // Pause while inside the WebView is the strongest drop-off
+      // signal we get natively — combine with the `last_screen` tag
+      // to see what page they abandoned on.
+      OracleTrace.event('web_background');
+    }
   }
 
   void _tuneAndroidWebView() {
@@ -206,6 +252,25 @@ class _SanctumStageState extends State<SanctumStage>
       });
     }
     if (error.isForMainFrame == false) return;
+
+    _pageHadError = true;
+    final String reason = _classifyWebError(error);
+    final String failed = _lastMainUrl ?? widget.shrineUrl;
+    final String host = Uri.tryParse(failed)?.host ?? '';
+    OracleTrace.event('web_error');
+    OracleTrace.tag('web_error_reason', reason);
+    OracleTrace.tag(
+      'web_last_error',
+      '${error.errorCode}:${error.description}',
+    );
+    if (host.isNotEmpty) OracleTrace.tag('web_error_host', host);
+    if (!_offerReached) {
+      OracleTrace.event('web_offer_unreachable');
+      OracleTrace.tag('offer_reached', 'false');
+      OracleTrace.tag('offer_unreachable_reason', reason);
+    } else {
+      OracleTrace.event('web_error_after_load');
+    }
 
     final blurb = error.description.toLowerCase();
     final isRedirectLoop = blurb.contains('too_many_redirects') ||
@@ -285,6 +350,172 @@ class _SanctumStageState extends State<SanctumStage>
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {}
+  }
+
+  // ── OracleTrace / Microsoft Clarity helpers ────────────────────
+  //
+  // The DOM inside the WebView is invisible to session replay.
+  // Native events + tags below reproduce the funnel that answers:
+  //   * did the user actually reach the offer site?
+  //   * did they land on a register / login / cashier page?
+  //   * did they submit an auth form or tap deposit?
+  // High-cardinality values (urls, hosts, labels, error text) go
+  // into TAGS, never into event names.
+
+  void _trackWebPage(String url) {
+    final Uri? uri = Uri.tryParse(url);
+    OracleTrace.screenName(
+      'web:${uri == null ? url : '${uri.host}${uri.path}'}',
+    );
+    OracleTrace.event('web_page');
+    OracleTrace.tag('web_last_url', url);
+    if (!_offerReached && !_pageHadError) {
+      _offerReached = true;
+      OracleTrace.event('web_offer_reached');
+      OracleTrace.tag('offer_reached', 'true');
+      if (uri?.host != null && uri!.host.isNotEmpty) {
+        OracleTrace.tag('offer_host', uri.host);
+      }
+    }
+    if (_depositRx.hasMatch(url)) {
+      OracleTrace.event('web_cashier_page');
+      OracleTrace.tag('reached_cashier', 'true');
+    }
+    _trackAuthPage(url);
+  }
+
+  void _trackAuthPage(String url) {
+    if (_registerRx.hasMatch(url)) {
+      OracleTrace.event('web_register_page');
+      OracleTrace.tag('reached_register', 'true');
+    } else if (_loginRx.hasMatch(url)) {
+      OracleTrace.event('web_login_page');
+      OracleTrace.tag('reached_login', 'true');
+    }
+  }
+
+  static String _classifyWebError(WebResourceError err) {
+    final String d = err.description.toLowerCase();
+    final int c = err.errorCode;
+    if (d.contains('connection_refused') ||
+        d.contains('connection refused')) {
+      return 'connection_refused';
+    }
+    if (d.contains('too_many_redirects') ||
+        d.contains('too many redirects')) {
+      return 'redirect_loop';
+    }
+    if (d.contains('name_not_resolved') ||
+        d.contains('address_unreachable') ||
+        d.contains('unknownhost') ||
+        c == -2) {
+      return 'dns_unresolved';
+    }
+    if (d.contains('timed out') || d.contains('timeout') || c == -8) {
+      return 'timeout';
+    }
+    if (d.contains('internet_disconnected') ||
+        d.contains('network_changed') ||
+        c == -6) {
+      return 'no_network';
+    }
+    if (d.contains('connection_reset')) return 'connection_reset';
+    if (d.contains('connection_closed') ||
+        d.contains('empty_response')) {
+      return 'connection_closed';
+    }
+    if (d.contains('ssl') || d.contains('cert') || c == -11) {
+      return 'ssl_error';
+    }
+    if (d.contains('blocked')) return 'blocked';
+    return 'other';
+  }
+
+  /// Idempotent in-page probe — the `window.__psOracleLens` guard
+  /// means calling this on every `onPageFinished` is a no-op after
+  /// the first navigation. Reports SPA route changes, deposit /
+  /// register / login clicks and auth form submits over the
+  /// `PyramidLens` JS channel.
+  void _installInsightProbe() {
+    _web.runJavaScript(r'''
+(function(){
+  if (window.__psOracleLens) return; window.__psOracleLens = true;
+  function send(t){ try { PyramidLens.postMessage(t); } catch(e){} }
+  var DEP=/(deposit|cashier|top.?up|add funds|replenish|payment|pay now|checkout|withdraw|пополн|депозит|касс|оплат|внести|вывод|платеж)/i;
+  var REG=/(sign.?up|regist|create.?account|регистрац|зарегистр)/i;
+  var LOG=/(sign.?in|log.?in|log.?on|войти|вход|авториз)/i;
+  var lastPath='';
+  function reportPath(){ var p=location.pathname+location.search; if(p!==lastPath){ lastPath=p; send('path:'+p);} }
+  reportPath();
+  ['pushState','replaceState'].forEach(function(fn){ var o=history[fn]; history[fn]=function(){ var r=o.apply(this,arguments); setTimeout(reportPath,60); return r; }; });
+  window.addEventListener('popstate',function(){ setTimeout(reportPath,60); });
+  document.addEventListener('click',function(e){
+    try{ var el=e.target;
+      for(var i=0;i<4&&el;i++){
+        var t=((el.innerText||el.value||(el.getAttribute&&el.getAttribute('aria-label'))||'')+'').trim();
+        if(t){ if(DEP.test(t)){send('deposit_click:'+t.slice(0,60));return;}
+               if(REG.test(t)){send('register_click:'+t.slice(0,60));return;}
+               if(LOG.test(t)){send('login_click:'+t.slice(0,60));return;} }
+        el=el.parentElement;
+      }
+    }catch(x){}
+  },true);
+  document.addEventListener('submit',function(e){
+    try{ var f=e.target;
+      var pw=f.querySelectorAll?f.querySelectorAll('input[type="password"]'):[];
+      var blob=((f.innerText||'')+' '+(f.getAttribute('action')||'')+' '+(f.className||''));
+      var confirm=f.querySelector&&(f.querySelector('input[name*="confirm" i]')||f.querySelector('input[name*="repeat" i]'));
+      if(pw&&pw.length>=2){send('auth_submit:register');return;}
+      if(pw&&pw.length===1){ send('auth_submit:'+((confirm||REG.test(blob))?'register':'login')); return; }
+      if(REG.test(blob)){send('auth_submit:register');return;}
+      if(LOG.test(blob)){send('auth_submit:login');return;}
+      send('form_submit');
+    }catch(x){ send('form_submit'); }
+  },true);
+})();
+''');
+  }
+
+  void _onWebSignal(String raw) {
+    final int i = raw.indexOf(':');
+    final String type = i < 0 ? raw : raw.substring(0, i);
+    final String data = i < 0 ? '' : raw.substring(i + 1);
+    switch (type) {
+      case 'path':
+        OracleTrace.event('web_spa_route');
+        OracleTrace.tag('web_last_path', data);
+        if (_depositRx.hasMatch(data)) {
+          OracleTrace.event('web_cashier_page');
+          OracleTrace.tag('reached_cashier', 'true');
+        }
+        _trackAuthPage(data);
+        break;
+      case 'deposit_click':
+        OracleTrace.event('web_deposit_click');
+        OracleTrace.tag('deposit_intent', 'true');
+        if (data.isNotEmpty) OracleTrace.tag('deposit_label', data);
+        break;
+      case 'register_click':
+        OracleTrace.event('web_register_click');
+        OracleTrace.tag('register_intent', 'true');
+        break;
+      case 'login_click':
+        OracleTrace.event('web_login_click');
+        OracleTrace.tag('login_intent', 'true');
+        break;
+      case 'auth_submit':
+        if (data == 'register') {
+          OracleTrace.event('web_register_submit');
+          OracleTrace.tag('attempted_register', 'true');
+        } else {
+          OracleTrace.event('web_login_submit');
+          OracleTrace.tag('attempted_login', 'true');
+        }
+        break;
+      case 'form_submit':
+        OracleTrace.event('web_form_submit');
+        break;
+    }
   }
 
   /// Android WebView does NOT open `target="_blank"` links or

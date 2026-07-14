@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../insight/oracle_trace.dart';
+
 // ────────────────────────────────────────────────────────────
 // TempestScreen — offline / no-wifi fallback.
 // ────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ class _TempestScreenState extends State<TempestScreen>
   @override
   void initState() {
     super.initState();
+    OracleTrace.screen('offline');
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -61,6 +64,7 @@ class _TempestScreenState extends State<TempestScreen>
 
   Future<void> _handleRetry() async {
     if (_isRetrying) return;
+    OracleTrace.event('offline_retry');
     await _pressCtrl.reverse();
     await _pressCtrl.forward();
     setState(() => _isRetrying = true);
